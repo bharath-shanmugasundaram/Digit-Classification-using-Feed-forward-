@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MNIST Digit Predictor</title>
+  <style>
+    body { text-align: center; font-family: Arial; }
+    canvas { border: 2px solid black; background: black; cursor: crosshair; }
+    #prediction { font-size: 24px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Draw a Digit (0–9)</h1>
+  <canvas id="canvas" width="280" height="280"></canvas><br>
+  <button onclick="clearCanvas()">Clear</button>
+  <button onclick="predict()">Predict</button>
+  <div id="prediction">Prediction: ?</div>
+
+  <script>
+    let canvas = document.getElementById("canvas");
+    let ctx = canvas.getContext("2d");
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let drawing = false;
+    canvas.addEventListener("mousedown", () => drawing = true);
+    canvas.addEventListener("mouseup", () => drawing = false);
+    canvas.addEventListener("mousemove", draw);
+
+    function draw(e) {
+      if (!drawing) return;
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(e.offsetX, e.offsetY, 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function clearCanvas() {
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      document.getElementById("prediction").innerText = "Prediction: ?";
+    }
+
+    async function predict() {
+      // get image data (280x280)
+      let imgData = ctx.getImageData(0, 0, 280, 280);
+
+      // create an offscreen canvas to resize to 28x28
+      let offscreen = document.createElement("canvas");
+      offscreen.width = 28;
+      offscreen.height = 28;
+      let octx = offscreen.getContext("2d");
+      octx.drawImage(canvas, 0, 0, 28, 28);
+
+      // get resized grayscale data
+      let smallData = octx.getImageData(0, 0, 28, 28);
+      let pixels = [];
+      for (let i = 0; i < smallData.data.length; i += 4) {
+        let gray = smallData.data[i]; // R channel is enough
+        pixels.push(gray / 255.0);   // normalize
+      }
+
+      // reshape into 28x28
+      let image = [];
+      for (let i = 0; i < 28; i++) {
+        image.push(pixels.slice(i*28, (i+1)*28));
+      }
+
+      // send to Flask
+      let res = await fetch("http://127.0.0.1:5001/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: image })
+      });
+
+      let result = await res.json();
+      document.getElementById("prediction").innerText =
+        "Prediction: " + result.prediction;
+    }
+  </script>
+</body>
+</html>
